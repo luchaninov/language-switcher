@@ -22,13 +22,18 @@ namespace LanguageSwitcher
         private const int WH_CALLWNDPROC = 4;
         private const int WH_KEYBOARD_LL = 13;
         private const int WM_KEYDOWN = 0x0100;
+        private const int WM_KEYUP = 0x0101;
         private const int WM_SYSKEYDOWN = 0x0104;
+        private const int WM_SYSKEYUP = 0x0105;
         
 
         private static LowLevelKeyboardProc _proc = HookCallback;
         private static IntPtr _hookID = IntPtr.Zero;
 
         private static FormMain formMain = null;
+
+        private static int lastKeyCodeDown = 0;
+        private static DateTime lastControlKeyDate = DateTime.MinValue;
 
         [STAThread]
         static void Main()
@@ -65,37 +70,58 @@ namespace LanguageSwitcher
         {
             bool handled = false;
 
-            if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN))
-            {
-                int vkCode = Marshal.ReadInt32(lParam);
-                handled = true;
+            // vkCode:
+            // 19 - pause
+            // 93 - context menu
+            // 161 - right shift
+            // 162 - left ctrl
+            // 163 - right ctrl
+            // 164 - left alt
+            // 165 - right alt
 
-                // 19 - pause
-                // 93 - context menu
-                // 161 - right shift
-                // 162 - left ctrl
-                // 163 - right ctrl
-                // 164 - left alt
-                // 165 - right alt
+            if (nCode >= 0) {
+                if (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN) {
+                    int vkCode = Marshal.ReadInt32(lParam);
 
+                    if (vkCode == 165 || vkCode == 162 || vkCode == 163) {
+                        if (vkCode != lastKeyCodeDown) {
+                            lastControlKeyDate = DateTime.Now;
+                        }
+                    }
 
-                if (vkCode == 165) {
-                    changeLanguageUa();
-                    handled = true;
-                } else if (vkCode == 162) {
-                    changeLanguageEn();
+                    lastKeyCodeDown = vkCode;
+                    handled = (vkCode == 165);
+                } else if (wParam == (IntPtr)WM_KEYUP|| wParam == (IntPtr)WM_SYSKEYUP) {
+                    int vkCode = Marshal.ReadInt32(lParam);
                     handled = false;
-                } else if (vkCode == 163) {
-                    changeLanguageRu();
-                    handled = false;
-                } else {
-                    handled = false;
+
+                    if (vkCode == lastKeyCodeDown) {
+                        TimeSpan elapsed = DateTime.Now - lastControlKeyDate;
+                        //Console.WriteLine("{0} - {1} = {2}", DateTime.Now, lastControlKeyDate, elapsed.ToString());
+                        //Console.WriteLine(elapsed.TotalMilliseconds);
+                        if (elapsed.TotalMilliseconds < 500) {
+                            if (vkCode == 165) {
+                                changeLanguageUa();
+                                handled = true;
+                            } else if (vkCode == 162) {
+                                changeLanguageEn();
+                                handled = false;
+                            } else if (vkCode == 163) {
+                                changeLanguageRu();
+                                handled = false;
+                            }
+                        }
+
+                        lastKeyCodeDown = 0;
+                    }
+
+                    if (formMain != null)
+                        formMain.label2.Text = vkCode.ToString() + " - " + handled.ToString();
+                    //Console.WriteLine((Keys)vkCode);
                 }
-
-                if (formMain != null) 
-                    formMain.label2.Text = vkCode.ToString() + " - " + handled.ToString();
-                //Console.WriteLine((Keys)vkCode);
             }
+
+            
 
             if (handled)
                 return (System.IntPtr)1;
